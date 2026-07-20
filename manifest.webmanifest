@@ -1,7 +1,7 @@
 {
-  "name": "BRiST – Bridge without the tricky bits",
+  "name": "BRiST 2.0 – Bridge without the tricky bits",
   "short_name": "BRiST",
-  "description": "A partnership trick-taking card game for four players.",
+  "description": "BRiST 2.0 with fixed-length sessions, rotating dealers and alternating red and blue decks.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

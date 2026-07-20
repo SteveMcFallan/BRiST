@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>BRiST – Bridge without the tricky bits</title>
+<title>BRiST 2.0 – Bridge without the tricky bits</title>
 <meta name="theme-color" content="#0d6b2f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -135,6 +135,10 @@ html,body{margin:0;min-height:100%;background:#e5e5e5;}
 .match-banner{border:1px solid #c89a16;background:#fff4c9;border-radius:10px;padding:12px;text-align:center;margin:10px 0}
 .match-banner .winner{font-size:20px;font-weight:700;color:#5b4300}
 .match-banner .detail{font-size:11px;color:#6b5a20;margin-top:4px}
+.score-sheet{width:100%;border-collapse:collapse;font-size:10px;margin-top:8px}
+.score-sheet th,.score-sheet td{padding:4px 3px;border-bottom:1px solid var(--border);text-align:center}
+.score-sheet th{font-size:9px;text-transform:uppercase;color:var(--text-secondary)}
+.deck-pill{display:inline-block;padding:2px 7px;border-radius:10px;color:white;font-weight:700}.deck-red{background:#a92f39}.deck-blue{background:#245f9b}
 
 body.dark-mode{background:#052d1c}
 body.dark-mode #app{background:#073b25}
@@ -166,7 +170,7 @@ body.dark-mode .stats-panel,body.dark-mode .trick-hist{border-color:#527363}
   <div class="splash">
     <div class="splash-image" aria-hidden="true"></div>
     <div class="splash-panel">
-      <div class="splash-title">BRiST<span class="heart">♥</span></div>
+      <div class="splash-title">BRiST<span class="heart">♥</span> <span style="font-size:16px;vertical-align:middle">2.0</span></div>
       <div class="splash-tagline">Bridge without the tricky bits</div>
       <div class="splash-sub">A partnership trick-taking card game for four players</div>
       <div class="seat-card">
@@ -180,11 +184,12 @@ body.dark-mode .stats-panel,body.dark-mode .trick-hist{border-color:#527363}
         <div style="font-size:10px;color:#666;text-align:center;margin-top:9px;line-height:1.35">North–South and East–West are partners.<br>The declarer controls the dummy hand.</div>
         <div class="settings-grid">
           <div class="setting-box">
-            <label for="match-target">Match target</label>
-            <select id="match-target" onchange="setMatchTarget(this.value)">
-              <option value="50">First to 50</option>
-              <option value="100" selected>First to 100</option>
-              <option value="150">First to 150</option>
+            <label for="session-hands">Session length</label>
+            <select id="session-hands" onchange="setSessionHands(this.value)">
+              <option value="8">8 hands</option>
+              <option value="12">12 hands</option>
+              <option value="16" selected>16 hands</option>
+              <option value="20">20 hands</option>
             </select>
           </div>
           <div class="setting-box">
@@ -192,15 +197,8 @@ body.dark-mode .stats-panel,body.dark-mode .trick-hist{border-color:#527363}
             <label class="theme-toggle"><input id="dark-toggle" type="checkbox" onchange="setDarkMode(this.checked)"> Dark baize</label>
           </div>
         </div>
-        <div class="setting-box" style="margin-top:8px">
-          <label>Card back</label>
-          <div class="back-options">
-            <button class="back-choice selected back-blue" data-back="blue" onclick="setCardBack('blue')" aria-label="Blue card back"></button>
-            <button class="back-choice back-red" data-back="red" onclick="setCardBack('red')" aria-label="Red card back"></button>
-            <button class="back-choice back-green" data-back="green" onclick="setCardBack('green')" aria-label="Green card back"></button>
-          </div>
-        </div>
-        <button class="btn splash-deal" onclick="startGame()">Start match</button>
+        <div class="seat-help">South is the first dealer and scorer. Dealer rotates clockwise each hand. Red and blue decks alternate automatically.</div>
+        <button class="btn splash-deal" onclick="startGame()">Start session</button>
       </div>
     </div>
   </div>
@@ -283,7 +281,7 @@ const RV={A:14,K:13,Q:12,J:11,T:10,9:9,8:8,7:7,6:6,5:5,4:4,3:3,2:2};
 const SC={S:'rs',H:'rh',D:'rd',C:'rc'};
 const POS=['N','E','S','W'],PART={N:'S',S:'N',E:'W',W:'E'};
 
-let G={scores:{NS:0,EW:0},handNum:0,history:[],playerPos:'S',matchTarget:100,matchOver:false,cardBack:'blue'};
+let G={scores:{NS:0,EW:0},handNum:0,history:[],playerPos:'S',sessionHands:16,matchOver:false,cardBack:'blue'};
 let trickPaused=false;
 let trickContinueReady=false;
 let trickContinueTimer=null;
@@ -298,10 +296,12 @@ function msg(t){const m=document.getElementById('msg');if(m)m.textContent=t||'';
 
 function scoreBar(id){
   const s=G.scores,nsl=s.NS>=s.EW,ewl=s.EW>s.NS;
+  const deck=G.hand?.deckColour||((G.handNum%2)?'red':'blue');
+  const dealer=G.hand?.declarer||'S';
   document.getElementById(id).innerHTML=`<div class="scorebar">
     <div class="sbt ${nsl?'lead':''}"><div class="t">NS</div><div class="v">${s.NS}</div></div>
     <div class="sbt ${ewl?'lead':''}"><div class="t">EW</div><div class="v">${s.EW}</div></div>
-  </div><div class="match-status">Match: first to ${G.matchTarget} points · Hand ${G.handNum}</div>`;
+  </div><div class="match-status">Hand ${G.handNum} of ${G.sessionHands} · Dealer ${dealer} · <span class="deck-pill deck-${deck}">${deck[0].toUpperCase()+deck.slice(1)} deck</span></div>`;
 }
 
 function pCard(c,small,fn,extra){
@@ -326,9 +326,9 @@ function safeStoreSet(key,value){
   try{if(window.localStorage)localStorage.setItem(key,value);}catch(e){}
 }
 
-function setMatchTarget(v){
-  G.matchTarget=Number(v)||100;
-  safeStoreSet('brist-match-target',String(G.matchTarget));
+function setSessionHands(v){
+  G.sessionHands=[8,12,16,20].includes(Number(v))?Number(v):16;
+  safeStoreSet('brist-session-hands',String(G.sessionHands));
 }
 function setDarkMode(on){
   document.body.classList.toggle('dark-mode',!!on);
@@ -343,14 +343,15 @@ function setCardBack(name){
 function renderKittyBacks(){
   const el=document.getElementById('kitty-backs');
   if(!el||!G.hand)return;
+  G.cardBack=G.hand.deckColour;
   const remaining=Math.max(0,G.hand.kitty.length-G.hand.kittyIdx-1);
   const shown=Math.min(3,remaining);
   el.innerHTML=Array.from({length:shown},()=>`<span class="card-back back-${G.cardBack}"></span>`).join('');
 }
 function startGame(){
   G.playerPos=playerPos;G.scores={NS:0,EW:0};G.handNum=0;G.history=[];G.matchOver=false;
-  setMatchTarget(document.getElementById('match-target').value);
-  dealHand(POS[0]);
+  setSessionHands(document.getElementById('session-hands').value);
+  dealHand('S');
 }
 function newMatch(){show('deal');}
 
@@ -360,7 +361,7 @@ function dealHand(declarer){
   const si=POS.indexOf(declarer),order=POS.slice(si+1).concat(POS.slice(0,si+1));
   let di=0;for(let t=0;t<10;t++)for(const p of order)hands[p].push(deck[di++]);
   G.hand={hands,kitty:deck.slice(40),kittyIdx:0,taken:[],
-    declarer,dummy:PART[declarer],trump:null,contract:null,
+    declarer,dummy:PART[declarer],deckColour:(G.handNum%2===1?'red':'blue'),trump:null,contract:null,
     trick:[],tricks:[],leader:null,decT:0,defT:0};
   G.hand.hands[G.hand.dummy]=srt(G.hand.hands[G.hand.dummy]);
   trickPaused=false;
@@ -745,7 +746,10 @@ function reviewHand(){
     declarerPoints:dp,
     defenderPoints:dfp,
     pts:made?dp:dfp,
-    winners:made?dt:df
+    winners:made?dt:df,
+    deckColour:h.deckColour,
+    nsPoints:dt==='NS'?dp:dfp,
+    ewPoints:dt==='EW'?dp:dfp
   });
   document.getElementById('rv-hand').textContent=G.handNum;
   let d=`<div class="srow"><span>Declarer</span><span>${h.declarer} (${h.declarer==='N'||h.declarer==='S'?'NS':'EW'})</span></div>`;
@@ -753,25 +757,26 @@ function reviewHand(){
   d+=`<div class="srow"><span>Tricks</span><span>Dec ${h.decT} · Def ${h.defT}</span></div>`;
   d+=`<div class="srow"><span>Result</span><span><span class="badge ${made?'bok':'bno'}">${made?'Made':'Down'}</span></span></div>`;
   d+=made?`<div class="srow"><span>${dt} score</span><span>+${dp} pts</span></div>`:`<div class="srow"><span>${df} score</span><span>+${dfp} pts</span></div>`;
-  const winner=G.scores.NS>=G.matchTarget?'NS':(G.scores.EW>=G.matchTarget?'EW':null);
-  G.matchOver=!!winner;
+  const sessionDone=G.handNum>=G.sessionHands;
+  const winner=G.scores.NS===G.scores.EW?'Draw':(G.scores.NS>G.scores.EW?'NS':'EW');
+  G.matchOver=sessionDone;
   const mr=document.getElementById('match-result');
   const nextBtn=document.getElementById('next-hand-btn');
-  if(winner){
-    mr.innerHTML=`<div class="match-banner"><div class="winner">${winner} wins the match</div><div class="detail">Final score: NS ${G.scores.NS} · EW ${G.scores.EW} · ${G.handNum} hands</div></div>`;
-    nextBtn.textContent='New match';nextBtn.onclick=newMatch;
+  if(sessionDone){
+    mr.innerHTML=`<div class="match-banner"><div class="winner">${winner==='Draw'?'Session drawn':winner+' wins the session'}</div><div class="detail">Final score after ${G.sessionHands} hands: NS ${G.scores.NS} · EW ${G.scores.EW}</div></div>`;
+    nextBtn.textContent='New session';nextBtn.onclick=newMatch;
   }else{
     mr.innerHTML='';nextBtn.textContent='Next hand';nextBtn.onclick=nextHand;
   }
   document.getElementById('rv-detail').innerHTML=d;
   renderHandStatistics();
-  let log='';
-  if(G.history.length>1){
-    log='<div class="lbl" style="margin-bottom:4px">Previous hands</div>';
-    for(const hr of G.history.slice(0,-1).reverse()){
-      log+=`<div class="hlog-row"><span>Hand ${hr.hand} · ${hr.declarer} · ${hr.contract}</span><span class="${hr.result==='Made'?'bok':'bno'}" style="padding:1px 5px;border-radius:4px;font-size:10px">${hr.result} · ${hr.winners}+${hr.pts}</span></div>`;
-    }
+  let log='<div class="lbl" style="margin-bottom:4px">Session scorecard</div><table class="score-sheet"><thead><tr><th>Hand</th><th>Deck</th><th>Dealer</th><th>Contract</th><th>Tricks</th><th>NS</th><th>EW</th></tr></thead><tbody>';
+  let ns=0,ew=0;
+  for(const hr of G.history){
+    ns+=hr.nsPoints;ew+=hr.ewPoints;
+    log+=`<tr><td>${hr.hand}</td><td><span class="deck-pill deck-${hr.deckColour}">${hr.deckColour==='red'?'R':'B'}</span></td><td>${hr.declarer}</td><td>${hr.contract}</td><td>${hr.declarerTricks}-${hr.defenderTricks}</td><td>${hr.nsPoints? '+'+hr.nsPoints:'–'}</td><td>${hr.ewPoints? '+'+hr.ewPoints:'–'}</td></tr>`;
   }
+  log+=`<tr><th colspan="5">Total</th><th>${ns}</th><th>${ew}</th></tr></tbody></table>`;
   document.getElementById('rv-log').innerHTML=log;
   scoreBar('sb-r');show('review');
 }
@@ -782,13 +787,12 @@ function nextHand(){
 }
 
 (function initPreferences(){
-  const savedTarget=Number(safeStoreGet('brist-match-target'))||100;
-  G.matchTarget=savedTarget;
-  const target=document.getElementById('match-target');if(target)target.value=String(savedTarget);
+  const savedHands=Number(safeStoreGet('brist-session-hands'))||16;
+  G.sessionHands=[8,12,16,20].includes(savedHands)?savedHands:16;
+  const target=document.getElementById('session-hands');if(target)target.value=String(G.sessionHands);
   const dark=safeStoreGet('brist-dark')==='1';
   const toggle=document.getElementById('dark-toggle');if(toggle)toggle.checked=dark;
   setDarkMode(dark);
-  setCardBack(safeStoreGet('brist-card-back')||'blue');
 })();
 
 </script>

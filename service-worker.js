@@ -1,4 +1,4 @@
-const CACHE_NAME = 'brist-v10-3-pwa-1';
+const CACHE_NAME = 'brist-v2-0-pwa-1';
 const APP_FILES = [
   './',
   './index.html',
