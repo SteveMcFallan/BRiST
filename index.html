@@ -4,14 +4,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
 <title>BRiST 2.0 – Bridge without the tricky bits</title>
+
 <meta name="theme-color" content="#0d6b2f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="BRiST">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png">
+
 <style>
 :root{
   --font-sans:Arial,Helvetica,sans-serif;
@@ -79,7 +84,14 @@ html,body{margin:0;min-height:100%;background:#e5e5e5;}
 .trick-hist{margin-top:6px;border-top:0.5px solid var(--border);padding-top:6px}
 .th-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:12px;border-bottom:0.5px solid var(--border)}
 .th-row:last-child{border-bottom:none}
-.th-cards{display:flex;gap:2px;flex-wrap:wrap}
+.th-cards{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.trick-history-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+.show-history-control{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-secondary);cursor:pointer;white-space:nowrap}
+.show-history-control input{margin:0}
+.history-play{display:inline-flex;align-items:center;gap:2px;margin-right:2px}
+.history-position{font-size:11px;color:var(--text-secondary)}
+.history-card-back{width:21px;height:29px;border-width:1px;border-radius:3px;box-shadow:0 1px 2px rgba(0,0,0,.25);vertical-align:middle}
+.history-card-back::after{inset:2px;border-radius:2px;font-size:5px;letter-spacing:.1px}
 
 .hand-zone{border-radius:9px;padding:7px;margin-top:6px;border:1px solid transparent}
 .dummy-zone{background:#ead7db;border-color:#d5b7bd}
@@ -266,7 +278,13 @@ body.dark-mode .stats-panel,body.dark-mode .trick-hist{border-color:#527363}
     <div class="hand-zone dummy-zone"><div class="lbl">Dummy (<span id="dl"></span>) <span class="dummy-note" id="dummy-note"></span></div><div class="hand" id="dh"></div></div>
     <div class="hand-zone player-zone"><div class="lbl">Your hand</div><div class="hand" id="ph"></div></div>
     <div class="trick-hist" id="trick-hist" style="display:none">
-      <div class="lbl" style="margin-bottom:4px">Tricks played</div>
+      <div class="trick-history-header">
+        <div class="lbl">Tricks played</div>
+        <label class="show-history-control" for="show-trick-cards">
+          <input type="checkbox" id="show-trick-cards" checked>
+          Show cards
+        </label>
+      </div>
       <div id="th-rows"></div>
     </div>
   </div>
@@ -298,6 +316,7 @@ const SC={S:'rs',H:'rh',D:'rd',C:'rc'};
 const POS=['N','E','S','W'],PART={N:'S',S:'N',E:'W',W:'E'};
 
 let G={scores:{NS:0,EW:0},handNum:0,history:[],playerPos:'S',sessionHands:16,matchOver:false,cardBack:'blue'};
+let showTrickCards=true;
 let trickPaused=false;
 let trickContinueReady=false;
 let trickContinueTimer=null;
@@ -327,6 +346,10 @@ function pCard(c,small,fn,extra){
 
 function cardInline(c){
   return`<span class="${SC[su(c)]}" style="font-size:12px;font-weight:500">${rk(c)}${SYM[su(c)]}</span>`;
+}
+
+function historyCardBack(){
+  return`<span class="card-back back-${G.cardBack} history-card-back" aria-label="Hidden card"></span>`;
 }
 
 let playerPos='S';
@@ -563,12 +586,15 @@ function renderTrickHistory(){
   if(G.hand.tricks.length===0){hist.style.display='none';return;}
   hist.style.display='block';
   rows.innerHTML=G.hand.tricks.map((t,i)=>{
-    const cards=t.trick.map(e=>`<span style="font-size:11px;color:var(--text-secondary)">${e.p}:</span>${cardInline(e.c)}`).join(' ');
+    const cards=t.trick.map(e=>{
+      const renderedCard=showTrickCards?cardInline(e.c):historyCardBack();
+      return`<span class="history-play"><span class="history-position">${e.p}:</span>${renderedCard}</span>`;
+    }).join('');
     const wteam=decTeam().includes(t.winner)?'Dec':'Def';
     return`<div class="th-row">
       <span style="color:var(--text-muted);font-size:11px;width:22px">${i+1}</span>
-      <span class="th-cards" style="flex:1;gap:4px">${cards}</span>
-      <span style="font-size:11px;color:var(--text-secondary);margin-left:4px">${t.winner} (${wteam})</span>
+      <span class="th-cards" style="flex:1">${cards}</span>
+      <span style="font-size:11px;color:var(--text-secondary);margin-left:4px;white-space:nowrap">${t.winner} (${wteam})</span>
     </div>`;
   }).join('');
 }
@@ -845,6 +871,14 @@ function nextHand(){
   const dark=safeStoreGet('brist-dark')==='1';
   const toggle=document.getElementById('dark-toggle');if(toggle)toggle.checked=dark;
   setDarkMode(dark);
+  const showCardsToggle=document.getElementById('show-trick-cards');
+  if(showCardsToggle){
+    showCardsToggle.checked=showTrickCards;
+    showCardsToggle.addEventListener('change',()=>{
+      showTrickCards=showCardsToggle.checked;
+      renderTrickHistory();
+    });
+  }
 })();
 
 </script>
