@@ -140,6 +140,21 @@ html,body{margin:0;min-height:100%;background:#e5e5e5;}
 .score-sheet th{font-size:9px;text-transform:uppercase;color:var(--text-secondary)}
 .deck-pill{display:inline-block;padding:2px 7px;border-radius:10px;color:white;font-weight:700}.deck-red{background:#a92f39}.deck-blue{background:#245f9b}
 
+.contract-guide{width:100%;border-collapse:separate;border-spacing:0;font-size:10px;margin:7px 0 9px;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden}
+.contract-guide th,.contract-guide td{padding:5px 4px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);text-align:center;vertical-align:middle}
+.contract-guide th:last-child,.contract-guide td:last-child{border-right:none}
+.contract-guide tr:last-child td{border-bottom:none}
+.contract-guide thead th{background:var(--surface-1);font-size:9px;text-transform:uppercase;color:var(--text-secondary);line-height:1.15}
+.contract-guide .group{font-weight:700;text-align:left;white-space:nowrap;background:var(--surface-1)}
+.contract-guide .contracts{text-align:left;line-height:1.55}
+.contract-guide .contract-choice{display:inline-block;border:1px solid var(--border);border-radius:5px;padding:3px 5px;margin:1px;background:var(--surface-2);cursor:pointer;font-weight:600;min-width:30px;text-align:center}
+.contract-guide .contract-choice:active{transform:scale(.96)}
+.contract-guide .contract-choice.selected{background:var(--fill-accent);border-color:var(--fill-accent);color:var(--on-accent)}
+.contract-guide .red-suit{color:#c0392b}
+.contract-guide .contract-choice.selected .red-suit{color:inherit}
+.contract-note{font-size:10px;color:var(--text-secondary);line-height:1.35;margin:2px 0 8px}
+@media(max-width:380px){.contract-guide{font-size:9px}.contract-guide th,.contract-guide td{padding:4px 2px}.contract-guide .contract-choice{padding:3px 4px;min-width:27px}}
+
 body.dark-mode{background:#052d1c}
 body.dark-mode #app{background:#073b25}
 body.dark-mode .card{background:#143f30;border-color:#3e6556}
@@ -223,8 +238,9 @@ body.dark-mode .stats-panel,body.dark-mode .trick-hist{border-color:#527363}
     <div style="font-size:14px;font-weight:500;margin-bottom:6px">Nominate your contract</div>
     <div style="margin-bottom:6px"><div class="lbl">Dummy — <span id="dn"></span></div><div class="hand" id="dp"></div></div>
     <div style="margin-bottom:6px"><div class="lbl">Your hand</div><div class="hand" id="ch"></div></div>
-    <div style="margin-bottom:6px"><div class="lbl">Level</div><div class="row" id="lvb"></div></div>
-    <div style="margin-bottom:8px"><div class="lbl">Suit / No trumps</div><div class="row" id="sub"></div></div>
+    <div class="lbl">BRiST contract and scoring card</div>
+    <div class="contract-note">Tap a contract below. Declarer scores only when the contract is made. Defenders always score one point per trick and receive a 10-point bonus when the contract is defeated.</div>
+    <div id="contract-table"></div>
     <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px" id="ci"></div>
     <button class="btn bp" id="conbtn" onclick="confirmContract()" style="width:100%;display:none">Confirm contract</button>
   </div>
@@ -400,30 +416,56 @@ function finishKitty(){
   renderContract();show('contract');
 }
 
+const VALID_CONTRACTS=[
+  ...['C','D','H','S','NT'].map(s=>({level:1,suit:s,group:'Part score'})),
+  {level:3,suit:'NT',group:'Game'},
+  ...['H','S'].map(s=>({level:4,suit:s,group:'Game'})),
+  ...['C','D'].map(s=>({level:5,suit:s,group:'Game'})),
+  ...['C','D','H','S','NT'].map(s=>({level:6,suit:s,group:'Small slam'})),
+  ...['C','D','H','S','NT'].map(s=>({level:7,suit:s,group:'Grand slam'}))
+];
 let selLv=null,selSu=null;
+function contractLabel(l,s){return `${l}${s==='NT'?'NT':SYM[s]}`;}
+function contractClass(s){return s==='H'||s==='D'?'red-suit':'';}
+function contractButton(l,s){
+  const selected=l===selLv&&s===selSu;
+  return `<button type="button" class="contract-choice ${selected?'selected':''}" onclick="pickContract(${l},'${s}')"><span class="${contractClass(s)}">${contractLabel(l,s)}</span></button>`;
+}
+function renderContractTable(){
+  const rows=[
+    {group:'Part score',contracts:[[1,'C'],[1,'D'],[1,'H'],[1,'S'],[1,'NT']],need:'7+',bonus:'0'},
+    {group:'Game',contracts:[[3,'NT']],need:'9+',bonus:'10'},
+    {group:'Game',contracts:[[4,'H'],[4,'S']],need:'10+',bonus:'10'},
+    {group:'Game',contracts:[[5,'C'],[5,'D']],need:'11+',bonus:'10'},
+    {group:'Small slam',contracts:[[6,'C'],[6,'D'],[6,'H'],[6,'S'],[6,'NT']],need:'12+',bonus:'25'},
+    {group:'Grand slam',contracts:[[7,'C'],[7,'D'],[7,'H'],[7,'S'],[7,'NT']],need:'13',bonus:'50'}
+  ];
+  document.getElementById('contract-table').innerHTML=`<table class="contract-guide">
+    <thead><tr><th>Contract</th><th>Choose</th><th>Need</th><th>Declarer bonus</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td class="group">${r.group}</td><td class="contracts">${r.contracts.map(([l,s])=>contractButton(l,s)).join('')}</td><td>${r.need}</td><td>${r.bonus}</td></tr>`).join('')}</tbody>
+  </table>`;
+}
 function renderContract(){
   const h=G.hand;
   document.getElementById('dn').textContent=h.dummy;
   document.getElementById('dp').innerHTML=h.hands[h.dummy].map(c=>pCard(c,true,'','')).join('');
   document.getElementById('ch').innerHTML=h.hands[G.playerPos].map(c=>pCard(c,false,'','')).join('');
-  document.getElementById('lvb').innerHTML=[1,2,3,4,5,6,7].map(l=>`<button class="btn bsm" onclick="pickLv(${l})" id="lv${l}">${l}</button>`).join('');
-  document.getElementById('sub').innerHTML=['S','H','D','C','NT'].map(s=>`<button class="btn bsm ${s==='H'||s==='D'?'rh':''}" onclick="pickSu('${s}')" id="su${s}">${s==='NT'?'NT':SYM[s]}</button>`).join('');
-  selLv=null;selSu=null;updCon();scoreBar('sb-c');
+  selLv=null;selSu=null;renderContractTable();updCon();scoreBar('sb-c');
 }
-function pickLv(l){selLv=l;updCon();}
-function pickSu(s){selSu=s;updCon();}
+function pickContract(l,s){selLv=l;selSu=s;renderContractTable();updCon();}
 function cBonus(l,s){if(l===7)return 50;if(l===6)return 25;if((l===3&&s==='NT')||(l===4&&(s==='S'||s==='H'))||(l===5&&(s==='D'||s==='C')))return 10;return 0;}
 function cType(l,s){if(l===7)return'Grand slam';if(l===6)return'Small slam';if((l===3&&s==='NT')||(l===4&&(s==='S'||s==='H'))||(l===5&&(s==='D'||s==='C')))return'Game';return'Part score';}
+function isValidContract(l,s){return VALID_CONTRACTS.some(c=>c.level===l&&c.suit===s);}
 function updCon(){
-  [1,2,3,4,5,6,7].forEach(l=>document.getElementById('lv'+l).classList.toggle('bp',l===selLv));
-  ['S','H','D','C','NT'].forEach(s=>document.getElementById('su'+s).classList.toggle('bp',s===selSu));
   const btn=document.getElementById('conbtn'),info=document.getElementById('ci');
-  if(selLv&&selSu){
-    info.textContent=`${selLv}${selSu==='NT'?'NT':SYM[selSu]} — need ${6+selLv} tricks · ${cType(selLv,selSu)}${cBonus(selLv,selSu)?' · +'+cBonus(selLv,selSu)+' bonus':''}`;
+  if(selLv&&selSu&&isValidContract(selLv,selSu)){
+    const bonus=cBonus(selLv,selSu);
+    info.textContent=`Selected: ${contractLabel(selLv,selSu)} · need ${6+selLv} tricks · ${cType(selLv,selSu)} · declarer scores tricks${bonus?' + '+bonus+' bonus':''} if made`;
     btn.style.display='block';
-  }else{info.textContent='Pick a level and a suit';btn.style.display='none';}
+  }else{info.textContent='Choose one of the contracts shown in the scorecard.';btn.style.display='none';}
 }
 function confirmContract(){
+  if(!isValidContract(selLv,selSu))return;
   const h=G.hand;
   h.trump=selSu==='NT'?null:selSu;
   h.contract={level:selLv,suit:selSu,tricks:6+selLv,bonus:cBonus(selLv,selSu),type:cType(selLv,selSu)};
@@ -695,12 +737,22 @@ function aiKittyAndContract(){
   const others=POS.filter(p=>p!==dec);
   let ri=0;for(const p of others)for(let t=0;t<3;t++)if(ri<rem.length)h.hands[p].push(rem[ri++]);
   POS.forEach(p=>{h.hands[p]=srt(h.hands[p]);});
-  const g=gsuit(h.hands[dec]),best=Object.entries(g).sort((a,b)=>b[1].length-a[1].length)[0];
-  const s=best[0],cnt=best[1].length,l=cnt>=7?4:cnt>=6?3:cnt>=5?2:1;
-  h.trump=s;h.contract={level:l,suit:s,tricks:6+l,bonus:cBonus(l,s),type:cType(l,s)};
+  const combined=h.hands[dec].concat(h.hands[h.dummy]);
+  const g=gsuit(combined),best=Object.entries(g).sort((a,b)=>b[1].length-a[1].length)[0];
+  const s=best[0],cnt=best[1].length;
+  const hcp=combined.reduce((n,c)=>n+({A:4,K:3,Q:2,J:1}[rk(c)]||0),0);
+  let l=1,contractSuit=s;
+  if(hcp>=33){l=7;}
+  else if(hcp>=29){l=6;}
+  else if(hcp>=25){
+    if(cnt>=8){l=(s==='H'||s==='S')?4:5;}
+    else{l=3;contractSuit='NT';}
+  }
+  h.trump=contractSuit==='NT'?null:contractSuit;
+  h.contract={level:l,suit:contractSuit,tricks:6+l,bonus:cBonus(l,contractSuit),type:cType(l,contractSuit)};
   h.leader=POS[(POS.indexOf(dec)+1)%4];h.trick=[];h.decT=0;h.defT=0;
   renderPlay();show('play');
-  msg(`${dec} declares ${l}${SYM[s]}`);
+  msg(`${dec} declares ${contractLabel(l,contractSuit)}`);
   if(!myTurn()&&!dummyTurn())setTimeout(aiPlay,800);
 }
 
